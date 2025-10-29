@@ -1,0 +1,10 @@
+/supra_node_logs
+/samples
+/build
+**/out
+**/cache
+**/lib
+**/node_modules
+**/build
+**/broadcast
+**.env

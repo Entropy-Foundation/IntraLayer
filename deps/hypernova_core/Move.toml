@@ -1,0 +1,16 @@
+[package]
+name = "hypernova_core"
+version = "1.0.0"
+authors = []
+
+[addresses]
+hypernova_core = "_"
+
+[dev-addresses]
+hypernova_core = "0xdead"
+
+[dependencies.SupraFramework]
+git = "https://github.com/Entropy-Foundation/aptos-core.git"
+rev = "aptosvm-v1.16_supra-v1.6.6"
+subdir = "aptos-move/framework/supra-framework"
+

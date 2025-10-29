@@ -1,0 +1,37 @@
+[package]
+name = "dfmm_framework"
+version = "1.0.0"
+authors = []
+
+[addresses]
+dfmm_framework = "_"
+access_control = "_"
+hypernova_core = "_"
+supra_oracle = "_"
+
+# admin account which is set after deployment
+dfmm_admin = "_"
+
+[dev-addresses]
+dfmm_admin = "0x46541ee138920e00595c0af4aa04f1e248d22af6c6e90e834b13b04ce9b55cec"
+dfmm_framework = "0x4d32537c4e7773cda63e2594bf2134c379b510c2dd9a68c2dfe53c7abccc61ba"
+access_control = "0xdeadF2"
+supra_oracle = "0xdeadF1"
+hypernova_core = "0xdead"
+
+[dependencies.SupraFramework]
+git = "https://github.com/Entropy-Foundation/aptos-core.git"
+rev = "aptosvm-v1.16_supra-v1.6.6"
+subdir = "aptos-move/framework/supra-framework"
+
+[dependencies.supra_oracle]
+local = "deps/supra_oracle"
+
+[dependencies.hypernova_core]
+local = "deps/hypernova_core"
+
+
+[dependencies.access_control]
+git = "https://github.com/Entropy-Foundation/access_control_public.git"
+subdir = ""
+rev = "master"

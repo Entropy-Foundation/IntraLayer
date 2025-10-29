@@ -1,0 +1,15 @@
+SPDX-License-Identifier: BUSL-1.1
+Business Source License 1.1
+Licensor: Supra Labs
+Licensed Work: DFMM Framework
+Additional Use Grant: You may use, copy, and modify the Licensed Work for non-production evaluation, research, security auditing, and educational purposes.
+Change Date: 2028-01-01
+Change License: MIT
+Terms
+The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant, above, permitting limited production use.
+Effective on the Change Date, or the third anniversary of your first use of any specific version of the Licensed Work (whichever is earlier), the Change License will apply to that version of the Licensed Work. If the Change License is an open source license, the Licensor also grants you the rights licensed under that license.
+Before the Change Date, you may not use the Licensed Work for production purposes, and you may not offer the Licensed Work as a service, or incorporate or distribute it in or with a product or service, without a separate commercial license from the Licensor.
+You must preserve all license notices in the Licensed Work and attribution to the Licensor. You must prominently display to users of your modified or redistributed versions that they are not the original and are not endorsed by the Licensor.
+If you violate this license, your rights under it terminate automatically. If the Licensor notifies you of a violation and you cure it within 30 days, your license is reinstated. The Licensor may make versions of the Licensed Work available under different terms.
+THE LICENSED WORK IS PROVIDED “AS IS,” WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION WARRANTIES OR CONDITIONS OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. TO THE EXTENT PERMITTED BY LAW, IN NO EVENT WILL THE LICENSOR BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY ARISING FROM OR IN CONNECTION WITH THE LICENSED WORK OR THIS LICENSE.
+This License is not an Open Source license as approved by the Open Source Initiative.
