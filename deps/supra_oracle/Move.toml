@@ -1,5 +1,5 @@
 [package]
-name = "supra_oracle"
+name = "core"
 version = "1.0.0"
 
 [addresses]

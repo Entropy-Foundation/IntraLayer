@@ -24,7 +24,7 @@ git = "https://github.com/Entropy-Foundation/aptos-core.git"
 rev = "aptosvm-v1.16_supra-v1.6.6"
 subdir = "aptos-move/framework/supra-framework"
 
-[dependencies.supra_oracle]
+[dependencies.core]
 local = "deps/supra_oracle"
 
 [dependencies.hypernova_core]
