@@ -5,12 +5,16 @@
 ///
 module dfmm_framework::asset_router {
 
+    use std::string::{Self, String};
     use aptos_std::signer;
     use aptos_std::error;
     use aptos_std::object::{Self, Object, ExtendRef};
     use aptos_std::smart_table::{Self, SmartTable};
+    use aptos_std::type_info::{Self};
 
-    use supra_framework::fungible_asset::{Metadata};
+    use supra_framework::fungible_asset::{Self, Metadata};
+    use supra_framework::primary_fungible_store;
+    use supra_framework::coin;
     use supra_framework::chain_id;
     use supra_framework::timestamp;
     use supra_framework::event::{Self};
@@ -31,7 +35,9 @@ module dfmm_framework::asset_router {
     /// Thrown when insufficient time has passed
     const ENOT_ENOUGH_TIME_PASSED: u64 = 3;
     /// Zero amount
-    const EAMOUNT_ZERO: u64 = 4;    
+    const EAMOUNT_ZERO: u64 = 4;
+    /// Not supported coin
+    const ECOIN_NOT_SUPPORTED: u64 = 5;        
     /// Thrown when the amount cannot cover service fees
     const ECANT_COVER_FEES: u64 = 20;
 
@@ -85,6 +91,19 @@ module dfmm_framework::asset_router {
         move_to(obj_signer, AdminWithdraw {
             assets: smart_table::new(),
         });        
+    }
+
+    /// Conversions supra coins to fa and deposits a fungible asset (FA) into the liquidity pool and triggers PoEL integration
+    public entry fun deposit_coin<CoinType>(account: &signer, amount: u64) {
+        // Only SupraCoin supported for now
+        assert!(type_info::type_name<CoinType>() == string::utf8(b"0x1::supra_coin::SupraCoin"), error::invalid_state(ECOIN_NOT_SUPPORTED));
+        // withdraw coins and convert them to fa
+        let fa = coin::coin_to_fungible_asset<CoinType>(coin::withdraw<CoinType>(account, amount));
+        let metadata = fungible_asset::metadata_from_asset(&fa);
+        // deposit fa to user balance
+        primary_fungible_store::deposit(signer::address_of(account), fa);
+        // call existing method deposit_fa
+        deposit_fa(account, metadata, amount); 
     }
 
     /// Deposits a fungible asset (FA) into the liquidity pool and triggers PoEL integration

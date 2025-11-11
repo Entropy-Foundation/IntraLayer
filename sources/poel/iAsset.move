@@ -357,9 +357,9 @@ module dfmm_framework::iAsset {
         allocated_rewards: u64,
         /// Withdrawable (claimed) rewards for a user
         withdrawable_rewards: u64,
-        /// Epoch when rewards were claimed 
+        /// Epoch when rewards were claimed
         withdrawable_rewards_epoch: u64,
-        /// Timestamp when rewards were claimed 
+        /// Timestamp when rewards were claimed
         withdrawable_rewards_ts: u64,
         /// Withdrawn rewards for a user
         withdrawn_rewards: u64
@@ -435,7 +435,7 @@ module dfmm_framework::iAsset {
             asset_info.previous_reward_index_asset = asset_info.reward_index_asset;
         };
 
-        // update global reward index for the iasste and total allocated rewards for the asset 
+        // update global reward index for the iasste and total allocated rewards for the asset
         asset_info.reward_index_asset = asset_info.reward_index_asset + reward_index_increase;
         asset_info.allocated_rewards_for_asset = asset_info.allocated_rewards_for_asset +  rewards;
     }
@@ -465,7 +465,7 @@ module dfmm_framework::iAsset {
 
         let current_ts = timestamp::now_seconds();
 
-        // ensures that user has some allocated rewards that could be claimed 
+        // ensures that user has some allocated rewards that could be claimed
         assert!(liquidity_provider_ref.allocated_rewards != 0, error::invalid_argument(ENO_ALLOCATED_REWARDS));
 
         // add the allocated rewards to the withdrawable claimed-rewards balance, can be withdrawn once the lockup cycle ends.
@@ -995,8 +995,8 @@ module dfmm_framework::iAsset {
         let asset_liquidity_ref = borrow_global<LiquidityTableItems>(get_asset_address(asset)); // global store
         let iasset_supply = get_iasset_extended_supply(asset, asset_liquidity_ref);
 
-        assert!(asset_liquidity_ref.deposited_asset_supply > 0 
-                && asset_liquidity_ref.deposited_asset_supply >= asset_amount, 
+        assert!(asset_liquidity_ref.deposited_asset_supply > 0
+                && asset_liquidity_ref.deposited_asset_supply >= asset_amount,
             error::invalid_state(EDEPOSITED_ASSET_AMOUNT));
         math64::mul_div(iasset_supply, asset_amount, asset_liquidity_ref.deposited_asset_supply)
     }
@@ -1112,7 +1112,7 @@ module dfmm_framework::iAsset {
             }
         );
     }
-    /// Updates the system's record of the last operator lockup cycle change (a concept inherent to delegation pools). 
+    /// Updates the system's record of the last operator lockup cycle change (a concept inherent to delegation pools).
     /// This function is triggered when the system detects a withdrawable amount from the pools, indicating the end of the previous lockup cycle.
     public (friend) fun update_cycle_info(
         current_epoch: u64
@@ -1120,7 +1120,7 @@ module dfmm_framework::iAsset {
         let ref = borrow_global_mut<TotalLiquidity>(get_storage_address());
         // update epoch and timestamp when a lockup-cycle change is detected
         ref.recent_cycle_update_epoch = current_epoch;
-        ref.lockup_cycle_start_ts = timestamp::now_seconds(); 
+        ref.lockup_cycle_start_ts = timestamp::now_seconds();
     }
 
     /// Redeems iAssets for underlying assets after the lockup period, updating user and global metrics.
@@ -1131,7 +1131,7 @@ module dfmm_framework::iAsset {
 
 
         let tracked_assets = borrow_global<TotalLiquidity>(get_storage_address());
-        // ensure that the iasset exists and it is redeemable 
+        // ensure that the iasset exists and it is redeemable
         assert!(smart_table::contains(&tracked_assets.assets, asset),error::not_found(EASSET_NOT_PRESENT));
         assert_redeemable(asset);
 
@@ -1150,7 +1150,7 @@ module dfmm_framework::iAsset {
         assert!(asset_entry.redeem_requested_iassets > 0, error::invalid_state(EREDEEM_AMOUNT));
         assert!(asset_entry.unlock_request_epoch < recent_cycle_update_epoch, error::invalid_argument(EUNLOCK_REQUEST_TIME));
 
-        // calculate the amount of collateral asset the user should receive 
+        // calculate the amount of collateral asset the user should receive
         let asset_to_withdraw = preview_redeem(asset_entry.redeem_requested_iassets, asset);
 
         let asset_liquidity_ref = borrow_global_mut<LiquidityTableItems>(get_asset_address(asset));
@@ -1273,8 +1273,8 @@ module dfmm_framework::iAsset {
             |key, _value| {
                 let asset = *key;
                 let table_obj = borrow_global_mut<LiquidityTableItems>(object::object_address(&asset));
-                // update collateral supply 
-                // The subtraction is safe because a withdrawal request can only be made against the submitted collateral. 
+                // update collateral supply
+                // The subtraction is safe because a withdrawal request can only be made against the submitted collateral.
                 // As a result, the sum of collateral supply and borrow requests can never be smaller than the withdrawal request
                 table_obj.collateral_supply = table_obj.collateral_supply + table_obj.total_borrow_requests - table_obj.total_withdraw_requests;
                 table_obj.total_borrow_requests = 0;
@@ -1357,7 +1357,7 @@ module dfmm_framework::iAsset {
         // compute the weight of the asset within the system-wide collateral portfolio
         let asset_weight = ((MAX_WEIGHT as u128) * liquidity_of_asset) / total_nominal_liquidity;
 
-        // calculate collateralisation rate 
+        // calculate collateralisation rate
         let collateralisation_rate = calculate_collateralization_rate_impl(asset_weight, desired_weight, min_collateralisation, max_collateralisation_first, max_collateralisation_second);
         (collateralisation_rate, desired_weight, desirability_score)
     }
@@ -1370,7 +1370,7 @@ module dfmm_framework::iAsset {
 
     /// Deposit hook function (Dispatchable Fungible Asset concept) to execute the update of the reward index and ensure the FA coin is not paused.
     /// Hook function doesn't check if the primary fungible store is frozen, it is not needed inside the hook method.
-    /// The assertation (user is frozen or not) is happening inside fungible_asset::deposit_sanity_check. 
+    /// The assertation (user is frozen or not) is happening inside fungible_asset::deposit_sanity_check.
     /// The invocation of fungible_asset::deposit_sanity_check is happening before the hook method. Here is a stack of methods:
     /// primary_fungible_store::transfer --> dispatchable_fungible_asset::transfer / deposit --> fungible_asset::deposit_sanity_check -->  assert!(!fa_store.frozen, error::permission_denied(ESTORE_IS_FROZEN));
     public fun deposit<T: key>(
@@ -1393,7 +1393,7 @@ module dfmm_framework::iAsset {
 
     /// Withdraw function (Dispatchable Fungible Asset concept) to execute the update of the reward index and ensure the FA coin is not paused.
     /// Hook function doesn't check if the primary fungible store is frozen, it is not needed inside the hook method.
-    /// The assertation (user is frozen or not) is happening inside fungible_asset::withdraw_sanity_check. 
+    /// The assertation (user is frozen or not) is happening inside fungible_asset::withdraw_sanity_check.
     /// The invocation of fungible_asset::withdraw_sanity_check is happening before the hook method. Here is a stack of methods:
     /// primary_fungible_store::transfer --> dispatchable_fungible_asset::transfer / withdraw --> fungible_asset::withdraw_sanity_check -->  assert!(!fa_store.frozen, error::permission_denied(ESTORE_IS_FROZEN));
     public fun withdraw<T: key>(
@@ -1419,7 +1419,7 @@ module dfmm_framework::iAsset {
         asset: Object<Metadata>,
         account: address
     ) acquires ManagingRefs {
-        
+
         let transfer_ref = &get_managing_refs(asset).transfer_ref;
         let wallet = primary_fungible_store::ensure_primary_store_exists(account, asset);
         fungible_asset::set_frozen_flag(transfer_ref, wallet, true);
@@ -1437,7 +1437,7 @@ module dfmm_framework::iAsset {
         asset: Object<Metadata>,
         account: address
     ) acquires ManagingRefs {
-        
+
         let transfer_ref = &get_managing_refs(asset).transfer_ref;
         let wallet = primary_fungible_store::ensure_primary_store_exists(account, asset);
         fungible_asset::set_frozen_flag(transfer_ref, wallet, false);
@@ -1478,7 +1478,7 @@ module dfmm_framework::iAsset {
     }
 
     #[view]
-    ///Calculate the fees in asset 
+    ///Calculate the fees in asset
     public fun calculate_asset_fee (asset: Object<Metadata>, supra_service_fees: u64):u64 acquires LiquidityTableItems{
         if (supra_service_fees > 0) {
             let asset_price = get_asset_price(asset); // asset price in usdt
@@ -1612,6 +1612,40 @@ module dfmm_framework::iAsset {
         )
     }
 
+    fun get_epoch_timer_impl(event_epoch: u64, event_ts: u64): u64 acquires TotalLiquidity {
+         assert!(
+            event_epoch != 0,
+            error::invalid_state(ENO_WITHDRAWABLE_REWARDS)
+        );
+
+        let remaining_time: u64 = 0;
+        let number_of_epoch_in_cycle = config::get_number_of_epoch_in_cycle();
+
+        let recent_cycle_update_epoch = get_cycle_data();
+        let length_of_lockup_cycle = config::get_length_of_lockup_cycle();
+        let current_ts = timestamp::now_seconds();
+
+        assert!(event_epoch > number_of_epoch_in_cycle, error::invalid_state(EINVALID_EPOCH));
+
+        if (recent_cycle_update_epoch == (event_epoch - number_of_epoch_in_cycle)) {
+            let deadline = event_ts + length_of_lockup_cycle + config::get_length_of_epoch();
+            if (deadline > current_ts) {
+                remaining_time = deadline - current_ts;
+            };
+
+        } else if (recent_cycle_update_epoch <= event_epoch) {
+            let lockup_start = get_lockup_cycle_ts();
+            let deadline = lockup_start + length_of_lockup_cycle;
+            if (deadline > current_ts) {
+                remaining_time = deadline - current_ts;
+            };
+
+        };
+
+        remaining_time
+    }
+
+
     #[view]
     /// Returns the collateralization rate multiplier constant.
     public fun get_coll_rate_multiplier(): u128 {
@@ -1624,44 +1658,19 @@ module dfmm_framework::iAsset {
 
         let lp_opt = get_liquidity_provider(user_address);
         if (option::is_none(&lp_opt)) return 0;
-        let lp_ref = borrow_global_mut<LiquidityProvider>(option::extract(&mut lp_opt));        
+        let lp_ref = borrow_global<LiquidityProvider>(option::extract(&mut lp_opt));
 
-        // ensure that user has some claimed rewards 
-        assert!(
-            lp_ref.reward_allocation_epoch != 0,
-            error::invalid_state(ENO_WITHDRAWABLE_REWARDS)
-        );
+        get_epoch_timer_impl(lp_ref.reward_allocation_epoch, lp_ref.reward_allocation_timestamp)
+    }
 
-        let remaining_time: u64 = 0;
-        let number_of_epoch_in_cycle = config::get_number_of_epoch_in_cycle();
+    #[view]
+    public fun get_redeem_iasset_timer_for_user(user_address: address, asset: Object<Metadata>): u64 acquires LiquidityProvider, TotalLiquidity {
+        let lp_opt = get_liquidity_provider(user_address);
+        if (option::is_none(&lp_opt)) return 0;
+        let lp_ref = borrow_global<LiquidityProvider>(option::extract(&mut lp_opt));
+        let asset_entry = smart_table::borrow(&lp_ref.asset_entry, asset);
 
-        let recent_cycle_update_epoch = get_cycle_data();
-        let length_of_lockup_cycle = config::get_length_of_lockup_cycle();
-        let current_ts = timestamp::now_seconds();
-
-        assert!(lp_ref.reward_allocation_epoch > number_of_epoch_in_cycle, error::invalid_state(EINVALID_EPOCH));
-
-        // If recent_cycle_update_epoch == (lp_ref.reward_allocation_epoch - number_of_epoch_in_cycle),
-        // then the next lockup-cycle change is expected be detected within the current epoch.
-        // Recall: rewards become withdrawable when reward_allocation_epoch < recent_cycle_update_epoch.
-        // the latest time this condition can be met is (reward_allocation_timestamp + length_of_lockup_cycle + length_of_epoch)
-        // The block below computes the remaining time until that deadline.
-        if (recent_cycle_update_epoch == (lp_ref.reward_allocation_epoch - number_of_epoch_in_cycle)) {
-            let deadline = lp_ref.reward_allocation_timestamp + length_of_lockup_cycle + config::get_length_of_epoch();
-            if (deadline > current_ts) {
-                remaining_time = deadline - current_ts;
-            };
-        // outside the prior interval, the latest time at which the condition can be satisfied shifts
-        } else if (recent_cycle_update_epoch <= lp_ref.reward_allocation_epoch) {
-            let lockup_start = get_lockup_cycle_ts();
-            let deadline = lockup_start + length_of_lockup_cycle;
-            if (deadline > current_ts) {
-                remaining_time = deadline - current_ts;
-            };
-
-        };
-
-        remaining_time
+        get_epoch_timer_impl(asset_entry.unlock_request_epoch, asset_entry.unlock_request_timestamp)
     }
 
 
@@ -1681,7 +1690,7 @@ module dfmm_framework::iAsset {
     }
 
     #[view]
-    // Returns the total nominal liquidity used as collateral in the system, denominated in SUPRA 
+    // Returns the total nominal liquidity used as collateral in the system, denominated in SUPRA
     public fun get_total_nominal_liquidity(): u128 acquires TotalLiquidity, LiquidityTableItems {
         let total_nominal_liquidity: u128 = 0;
         let total_liquidity_ref = borrow_global<TotalLiquidity>(get_storage_address());
@@ -1953,7 +1962,7 @@ module dfmm_framework::iAsset {
         max_collateralisation_first: u64,
         max_collateralisation_second: u64
     ):u64 {
-        // calculation uses a piecewise function with three intervals 
+        // calculation uses a piecewise function with three intervals
         let collateralisation_rate: u128 = if (asset_weight == 0 || (asset_weight == (MAX_WEIGHT as u128) && desired_weight == (MAX_WEIGHT as u32))) {
             (min_collateralisation as u128)
         } else if(asset_weight <= (desired_weight as u128 )) {
@@ -2049,7 +2058,7 @@ module dfmm_framework::iAsset {
         preminted_iassets: u64, preminting_epoch_number : u64, preminting_ts : u64) acquires TotalLiquidity, LiquidityProvider {
 
         create_iasset_entry(account, asset);
-        let user_liquidity_obj_address = option::extract(&mut get_liquidity_provider(account));        
+        let user_liquidity_obj_address = option::extract(&mut get_liquidity_provider(account));
         let asset_entry = smart_table::borrow_mut(
             &mut borrow_global_mut<LiquidityProvider>(user_liquidity_obj_address).asset_entry,
             asset
