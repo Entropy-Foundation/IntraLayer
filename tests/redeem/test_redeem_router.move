@@ -219,6 +219,74 @@ module dfmm_framework::redeem_router_test  {
         test_util::clean_up(s_burn_cap, s_mint_cap);
     }
 
+    // This test checks that the owner-gated forced redeem (`redeem_iasset_force`) succeeds in a single tx even when
+    // the asset is NOT redeemable and without waiting for the lockup-cycle. It proves the `force` flag bypasses
+    // `assert_redeemable` in BOTH the request step (redeem_request) and the redeem step (redeem_iasset).
+    #[test(deployer = @dfmm_framework, supra = @0x1, supra_oracles = @supra_oracle, user1 = @0x2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a)]
+    fun test_poel_redeem_iasset_force(deployer: &signer, supra: &signer, supra_oracles: &signer, user1: &signer) {
+        test_util::init_root_config(deployer); // set cycle length
+        asset_config::init_for_test(deployer);
+        let (s_burn_cap, s_mint_cap) = test_util::init_router_poel_iasset(deployer, supra); // poel, iasset, router
+        chain_id::initialize_for_test(supra, CHAIN_ID);
+        let time0 = 100001000000;
+        let delta = 3600;
+        timestamp::set_time_has_started_for_testing(supra);
+        timestamp::update_global_time_for_test_secs(time0);
+
+        supra_oracle_storage::init_module_for_test(supra_oracles);
+        supra_oracle_storage::set_price(1, 500_000_000, 18);
+        supra_oracle_storage::set_price(500, 100_000_000, 18);
+
+        // create fa
+        let (asset_sol, mint_sol_cap) = test_util::create_dummy_fa(deployer, b"SOL", b"SOL");
+        let chain_id = (chain_id::get() as u64);
+        // register iasset
+        poel::create_new_iasset(deployer, b"iSOL", b"iSOL", 1,
+            b"https://qa-supra-nova-ui.supra.com/images/currency-icons/solana.svg", b"https://qa-supra-nova-ui.supra.com/iasset-factory",
+            asset_util::get_fa_key(asset_sol), chain_id, 8, test_util::bridge_address_vec());
+
+        let amount = 10000;
+        let amount_deposit1 = 3000;
+        let amount_to_redeem1 = 1000;
+        let user1_address = signer::address_of(user1);
+
+        // grant user1 the owner role so it can invoke the owner-gated forced redeem on its own iAssets
+        config::set_owner_role(deployer, user1_address, true);
+
+        // mint fa
+        primary_fungible_store::mint(&mint_sol_cap, user1_address, amount);
+
+        // register fa as supported asset
+        asset_config::register_fa(deployer, asset_sol);
+
+        // deposit
+        router::deposit_fa(user1, asset_sol, amount_deposit1); // reposit funds, borrow_request is triggered
+        assert!(primary_fungible_store::balance(user1_address, asset_sol) == amount - amount_deposit1, 1);
+
+        timestamp::fast_forward_seconds(delta); // change epoch to mint
+        reconfiguration::reconfigure_for_test_custom();
+        timestamp::fast_forward_seconds(delta);
+        reconfiguration::reconfigure_for_test_custom();
+        poel::update_borrowed_amount(deployer);
+
+        // take iasset reference
+        let iasset = iAsset::get_iasset_metadata(asset_util::get_fa_key(asset_sol), chain_id);
+
+        poel::borrow(iasset, user1_address); // mint iasset
+        assert!(primary_fungible_store::balance(user1_address, iasset) == amount_deposit1, 1); // iasset
+
+        // disable redeem on the asset level: the normal flow would abort with ENOT_REDEEMABLE here
+        poel::set_redeemable(deployer, iasset, false);
+
+        // forced redeem in a single tx: bypasses assert_redeemable (in both request & redeem) AND the lockup-cycle wait
+        poel::redeem_iasset_force(user1, iasset, amount_to_redeem1, x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a");
+
+        // after redeem the underlying asset is returned to the destination (user1)
+        assert!(primary_fungible_store::balance(user1_address, asset_sol) == amount - amount_deposit1 + amount_to_redeem1, 1);
+
+        test_util::clean_up(s_burn_cap, s_mint_cap);
+    }
+
     // This test checks the redeem process and ineracts with iasset module directly to mint, call redeem_request and redeem_iasset
     // This test uses FA as a asset for access pool
     #[test(deployer = @dfmm_framework, supra = @0x1, user1 = @0x2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a)]
@@ -269,14 +337,14 @@ module dfmm_framework::redeem_router_test  {
         iAsset::mint_iasset(user1_address, iasset); // mint iasset
         assert!(primary_fungible_store::balance(user1_address, iasset) == amount_deposit1, 1); // iasset
 
-        iAsset::redeem_request(user1, amount_to_redeem1, iasset, 0); // redeem request
+        iAsset::redeem_request(user1, amount_to_redeem1, iasset, 0, false); // redeem request
         // move the time
         timestamp::fast_forward_seconds(test_util::get_cycle_length());
         iAsset::update_recent_cycle_update_epoch(3);
-        let amount_redeem = iAsset::redeem_iasset(user1, iasset);
+        let amount_redeem = iAsset::redeem_iasset(user1, iasset, false);
         let (origin_token_address, origin_token_chain_id, _, source_bridge_address) = iAsset::deconstruct_iasset_source(&iAsset::get_iasset_source(iasset));
         // target fa is not specified
-        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a");
+        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a",false);
 
         // after redeem
         assert!(primary_fungible_store::balance(user1_address, asset_sol) == amount - amount_deposit1 + amount_redeem, 1);
@@ -349,7 +417,7 @@ module dfmm_framework::redeem_router_test  {
         assert!(iasset_supply == iasset_amount_deposit, 1);
         assert!(primary_fungible_store::balance(user1_address, iasset) == iasset_amount_deposit, 1); // iasset
 
-        iAsset::redeem_request(user1, iasset_amount_to_redeem, iasset, 0); // redeem request 10 iasset
+        iAsset::redeem_request(user1, iasset_amount_to_redeem, iasset, 0, false); // redeem request 10 iasset
         // move the time
         timestamp::fast_forward_seconds(test_util::get_cycle_length());
         iAsset::update_recent_cycle_update_epoch(3);
@@ -429,7 +497,7 @@ module dfmm_framework::redeem_router_test  {
         assert!(iasset_supply == iasset_amount_deposit, 1);
         assert!(primary_fungible_store::balance(user1_address, iasset) == iasset_amount_deposit, 1); // iasset
 
-        iAsset::redeem_request(user1, iasset_amount_to_redeem, iasset, 0); // redeem request 10 iasset
+        iAsset::redeem_request(user1, iasset_amount_to_redeem, iasset, 0, false); // redeem request 10 iasset
         // move the time
         timestamp::fast_forward_seconds(test_util::get_cycle_length());
         iAsset::update_recent_cycle_update_epoch(3);
@@ -492,9 +560,9 @@ module dfmm_framework::redeem_router_test  {
         iAsset::mint_iasset(user1_address, iasset); // mint iasset
         assert!(primary_fungible_store::balance(user1_address, iasset) == amount_deposit1, 1); // iasset
 
-        let amount_redeem = iAsset::redeem_iasset(user1, iasset); // no redeem_rquest before
+        let amount_redeem = iAsset::redeem_iasset(user1, iasset, false); // no redeem_rquest before
         let (origin_token_address, origin_token_chain_id, _, source_bridge_address) = iAsset::deconstruct_iasset_source(&iAsset::get_iasset_source(iasset));
-        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a");
+        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a", false);
 
         test_util::clean_up(s_burn_cap, s_mint_cap);
     }
@@ -546,16 +614,16 @@ module dfmm_framework::redeem_router_test  {
         iAsset::mint_iasset(user1_address, iasset); // mint iasset
         assert!(primary_fungible_store::balance(user1_address, iasset) == amount_deposit1, 1); // iasset
 
-        iAsset::redeem_request(user1, amount_to_redeem1, iasset, 0); // redeem request
+        iAsset::redeem_request(user1, amount_to_redeem1, iasset, 0, false); // redeem request
         // move the time
         timestamp::fast_forward_seconds(delta);
         reconfiguration::reconfigure_for_test_custom();
         iAsset::update_recent_cycle_update_epoch(3);
 
-        let amount_redeem = iAsset::redeem_iasset(user1, iasset);
+        let amount_redeem = iAsset::redeem_iasset(user1, iasset, false);
         let (_, _, _, source_bridge_address) = iAsset::deconstruct_iasset_source(&iAsset::get_iasset_source(iasset));
         // specify wrong target address, so it is an attempt to call hypernova in the future which is not supported yet
-        redeem_router::redeem_iasset(x"e2794e1139f10c", 11155111, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a");
+        redeem_router::redeem_iasset(x"e2794e1139f10c", 11155111, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a", false);
 
         test_util::clean_up(s_burn_cap, s_mint_cap);
     }
@@ -593,7 +661,7 @@ module dfmm_framework::redeem_router_test  {
         assert!(primary_fungible_store::balance(user1_address, asset_eth) == amount - amount_deposit1, 1);
 
         // redeem amount is too big
-        redeem_router::redeem_iasset(asset_util::get_fa_key(asset_eth), chain_id, test_util::bridge_address_vec(), (amount_to_redeem1 as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a");
+        redeem_router::redeem_iasset(asset_util::get_fa_key(asset_eth), chain_id, test_util::bridge_address_vec(), (amount_to_redeem1 as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a", false);
 
         test_util::clean_up(s_burn_cap, s_mint_cap);
     }
@@ -679,11 +747,11 @@ module dfmm_framework::redeem_router_test  {
         // move the time
         timestamp::fast_forward_seconds(test_util::get_cycle_length());
         iAsset::update_recent_cycle_update_epoch(4);
-        let amount_redeem = iAsset::redeem_iasset(user1, iasset);
+        let amount_redeem = iAsset::redeem_iasset(user1, iasset, false);
         assert!(amount_redeem == expected_burned_iassets, 1); // redeem is less than requested
 
         let (origin_token_address, origin_token_chain_id, _, source_bridge_address) = iAsset::deconstruct_iasset_source(&iAsset::get_iasset_source(iasset));
-        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a");
+        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, (amount_redeem as u128), x"2a1d929f9939b0755adfa3053b7b57ea6e205adc1a71b594835dd7c06f0f609a", false);
 
         // after redeem
         assert!(primary_fungible_store::balance(user1_address, asset_sol) == amount - amount_deposit1 + amount_redeem, 1);
@@ -757,7 +825,7 @@ module dfmm_framework::redeem_router_test  {
         assert!(primary_fungible_store::balance(user1_address, iasset) == amount_deposit1, 1); // iasset
 
         // iasset 1000000, fees in iasset  = 1666666
-        iAsset::redeem_request(user1, amount_to_redeem1, iasset, fees_supra); // redeem request, error expected
+        iAsset::redeem_request(user1, amount_to_redeem1, iasset, fees_supra, false); // redeem request, error expected
 
         test_util::clean_up(s_burn_cap, s_mint_cap);
     }

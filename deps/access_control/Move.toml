@@ -1,13 +1,15 @@
 [package]
-name = "core"
+name = "access_control"
 version = "1.0.0"
+authors = []
 
 [addresses]
-supra_oracle = "_"
+access_control = "_"
 
+[dev-addresses]
+access_control = "0xdead"
 
 [dependencies.SupraFramework]
 git = "https://github.com/Entropy-Foundation/aptos-core.git"
 rev = "aptosvm-v1.16_supra-v1.8.3"
 subdir = "aptos-move/framework/supra-framework"
-

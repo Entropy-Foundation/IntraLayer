@@ -11,6 +11,6 @@ hypernova_core = "0xdead"
 
 [dependencies.SupraFramework]
 git = "https://github.com/Entropy-Foundation/aptos-core.git"
-rev = "aptosvm-v1.16_supra-v1.6.6"
+rev = "aptosvm-v1.16_supra-v1.8.3"
 subdir = "aptos-move/framework/supra-framework"
 

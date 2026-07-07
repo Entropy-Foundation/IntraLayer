@@ -23,7 +23,8 @@ module dfmm_framework::asset_util {
     /// Zero price not allowed for calculation
     const EPRICE_ZERO: u64 = 1;
 
-    ///  return asset value in the price2 based on its price1
+    /// Return the asset value in terms of price_2 given its value in price_1. price_1 and price_2 come from the oracle and may use different decimals.
+    /// We first normalize both oracle prices to 18 decimals, then compute: asset_amount * normalized_price_1 / normalized_price_2
     #[view]
     public fun get_asset_value_in(asset_amount:u64, price_1: u128, decimal_1: u16, price_2: u128, decimal_2: u16): u128 {
         assert!(price_1 > 0 && price_2 > 0, error::invalid_state(EPRICE_ZERO));

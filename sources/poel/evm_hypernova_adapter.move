@@ -128,6 +128,8 @@ module dfmm_framework::evm_hypernova_adapter {
         );
     }
 
+    /// Execute a bridge message under either optimistic or safe verification strategy,
+    /// depending on the current bridge configuration.
     entry fun execute_optimistic_or_safe(
         account: &signer,
         recent_block_slot: u64,
@@ -163,12 +165,16 @@ module dfmm_framework::evm_hypernova_adapter {
         log_hash: vector<u8>,
         log_index: u64,
     ) acquires TokenBridgeState {
-        let bridge_ref = get_bridge_state_mut();
+        // Load mutable bridge state and ensure the bridge is not paused.
+        let bridge_ref = get_bridge_state_mut(); 
         assert!(!bridge_ref.paused, error::invalid_state(EPAUSED));
 
+        // Decode source and destination HyperNova addresses
         let source_hn_address = from_bcs::to_address(source_hn_address);
         let destination_hn_address = from_bcs::to_address(destination_hn_address);
 
+        // Verify the block / receipt proofs using the configured verification strategy
+        // (optimistic or safe), and extract the target log plus its canonical hash.
         let (extracted_log, extracted_log_hash) = process_data_optimistic_or_safe(
             account,
             recent_block_slot,
@@ -206,52 +212,66 @@ module dfmm_framework::evm_hypernova_adapter {
             bridge_ref.verification_strategy_type,
             bridge_ref.safety_level
         );
+        // Record the executed hash to prevent replay of the same event
         record_executed_event_hash(bridge_ref, extracted_log_hash);
+        // Parse the verified log, validate the bridge mapping, normalize amounts, and premint iassets to user, service-fee address and relayer
         process_rent_event(signer::address_of(account), bridge_ref.verification_strategy_type, bridge_ref.safety_level, extracted_log);
 
         event::emit(ExecutionEvent { log_index, message_id, extracted_log_hash });
     }
 
+    /// Update the verification strategy used 
     public entry fun set_verification_strategy_type(account: &signer, verification_strategy_type: u8, safety_level: u8) acquires TokenBridgeState {
+        // Only protocol admin is allowed to change verification strategy
         config::assert_admin(account);
 
         let ref = get_bridge_state_mut();
+        // Do not allow configuration changes while the adapter is paused
         assert!(!ref.paused, error::invalid_state(EPAUSED));
+        // Ensure the strategy type is within the allowed range
         assert!(
             verification_strategy_type >= MIN_VERIFICATION_STRATEGY_TYPE
                 && verification_strategy_type <= MAX_VERIFICATION_STRATEGY_TYPE,
             error::invalid_state(EINVALID_VERIFICATION_STRATEGY_TYPE_RANGE)
         );
-
+ 
+        // Update strategy and safety configuration
         ref.verification_strategy_type = verification_strategy_type;
         ref.safety_level = safety_level; // no validation for the safety level for now
 
         event::emit(VerificationStrategyUpdatedEvent { verification_strategy_type, safety_level });
     }
 
+    /// Updates the paused flag 
     public entry fun set_pause(account: &signer, paused: bool) acquires TokenBridgeState {
         config::assert_admin(account);
+        // Update the bridge adapter pause flag
         let bridge_state = get_bridge_state_mut();
         bridge_state.paused = paused;
     }
 
     fun process_rent_event(relayer: address, verification_strategy_type: u8, safety_level: u8, extracted_log: ExtractedLog) {
-        // Extract and validate message data
+        // Extract the raw ABI-encoded message payload 
         let message_data = get_data(&extracted_log);
+        // Message format is fixed-size, reject anything with unexpected length
         assert!(
             vector::length(message_data) == MESSAGE_DATA_SIZE,
             error::invalid_state(EINVALID_MESSAGE_DATA_SIZE)
         );
 
+        // Extract topics from the EVM log: event_signature, source_bridge, message_id, ...
         let event_topics = get_topics(&extracted_log);
         assert!(
             vector::length(event_topics) >= NUM_EVENT_TOPICS,
             error::invalid_state(EINVALID_EVENT_TOPICS_LENGTH)
         );
 
+        // Topic 1: address of the token bridge contract on the source chain
         let source_bridge_address = *vector::borrow(event_topics, 1);
+        // Topic 2: message identifier
         let message_id = *vector::borrow(event_topics, 2);
 
+        // Parse header fields: sender, source token, and source chain ID.
         let (sender_address,
             source_token_address,
             source_chain_id_bytes
@@ -260,11 +280,13 @@ module dfmm_framework::evm_hypernova_adapter {
         vector::reverse(&mut source_chain_id_bytes);
         let source_chain_id = (from_bcs::to_u256(source_chain_id_bytes) as u64);
 
+        // Verifies that, for a given asset, the provided source bridge address is valid
         assert!(
             iAsset::is_bridge_valid(source_token_address, source_chain_id, source_bridge_address),
             error::invalid_state(EINVALID_SOURCE_TOKEN_BRIDGE_ADDRESS)
         );
 
+        // Parse transfer details
         let (transfer_payload,
             final_amount,
             service_fee,// it includes relayer reward as well
@@ -272,8 +294,11 @@ module dfmm_framework::evm_hypernova_adapter {
             recipient_address
         ) = parse_transfer_details(message_data);
 
+        // Receiver of the iAsset on Supra
         let reciever = from_bcs::to_address(recipient_address);
+        // Resolve the iAsset metadata for this (source_token, source_chain_id) pair
         let iasset = iAsset::get_iasset_metadata(source_token_address, source_chain_id);
+        // Extract original source token decimals 
         let (_, _, source_token_decimals, _) = iAsset::deconstruct_iasset_source(&iAsset::get_iasset_source(iasset));
 
         // Solidity contract normalizes the amount ONLY if token has > 8 decimals.
@@ -284,9 +309,10 @@ module dfmm_framework::evm_hypernova_adapter {
         let n_user_amount = scale_up_to_fa_decimals(final_amount, source_token_decimals);
         // normalized asset amount as a service fee (service_fee contains relayer rewards)
         let n_service_fee_amount = scale_up_to_fa_decimals((service_fee - relayer_reward), source_token_decimals);
-        // normalzed asset amount for the relayer
+        // normalized asset amount for the relayer
         let n_relayer_fee_amount = scale_up_to_fa_decimals(relayer_reward, source_token_decimals);
 
+        // execute the borrow request to premint the corresponding iAssets
         borrow_request(iasset,
             n_user_amount, reciever,  // user portion
             n_service_fee_amount, config::get_service_fees_address(), // services fees includes rewards fee
@@ -315,12 +341,14 @@ module dfmm_framework::evm_hypernova_adapter {
         );
     }
 
+    /// Normalize a source token amount to the iAsset decimal standard (8 decimals)
     fun scale_up_to_fa_decimals (value:u64, source_token_decimals:u16):u64 {
         if (source_token_decimals < 8)
             (asset_util::scale((value as u128), source_token_decimals, 8) as u64)
         else value
     }
 
+    /// Parse the header section of the bridge message payload
     fun parse_header_fields(message_data: &vector<u8>): (vector<u8>, vector<u8>, vector<u8>) {
         let sender_address = vector::slice(message_data, 64, 96);
         let source_token_address = vector::slice(message_data, 96, 128);
@@ -328,6 +356,7 @@ module dfmm_framework::evm_hypernova_adapter {
         (sender_address, source_token_address, source_chain_id_bytes)
     }
 
+    /// Records the executed event hash, and prevent replays
     fun record_executed_event_hash(ref: &mut TokenBridgeState, hash: vector<u8>) {
         let processed_event_hashes = &mut ref.processed_event_hashes;
         assert!(
@@ -337,6 +366,7 @@ module dfmm_framework::evm_hypernova_adapter {
         smart_table::add(processed_event_hashes, hash, true);
     }
 
+    /// Parse the transfer-related section of the bridge message payload
     fun parse_transfer_details(message_data: &vector<u8>): (vector<u8>, u64, u64, u64, vector<u8>) {
         let transfer_payload = vector::slice(message_data, 160, 192);
         let final_amount = asset_util::bytes_to_u64(vector::slice(message_data, 192, 224));
@@ -347,11 +377,13 @@ module dfmm_framework::evm_hypernova_adapter {
         (transfer_payload, final_amount, fee_cut_to_service, relayer_reward, recipient_address)
     }
 
+    /// Derive the storage address for the TokenBridgeState object
     fun get_storage_address(): address {
         object::create_object_address(&@dfmm_framework, STORAGE_SEED)
     }
 
     #[view]
+    /// Check whether a given event hash has already been executed
     public fun has_executed_event_hash(hash: vector<u8>): bool acquires TokenBridgeState {
         let processed_event_hashes =
             &borrow_global<TokenBridgeState>(get_storage_address()).processed_event_hashes;

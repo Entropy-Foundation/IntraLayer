@@ -1041,13 +1041,17 @@ module dfmm_framework::iAsset {
         account: &signer,
         iasset_amount: u64,
         asset: Object<Metadata>,
-        fees: u64
+        fees: u64,
+        force: bool
     ) acquires TotalLiquidity, ManagingRefs, LiquidityTableItems, LiquidityProvider, AssetOperations {
 
         let tracked_assets = borrow_global<TotalLiquidity>(get_storage_address());
         // ensure that this iAsset exists and it is redeemable
         assert!(smart_table::contains(&tracked_assets.assets, asset),error::not_found(EASSET_NOT_PRESENT));
-        assert_redeemable(asset);
+        // a forced redeem (owner-gated, single-tx) intentionally bypasses the redeemable asset check
+        if (!force) {
+            assert_redeemable(asset);
+        };
 
         let account_address = signer::address_of(account);
         let iasset_balance = primary_fungible_store::balance(account_address, asset);
@@ -1124,16 +1128,21 @@ module dfmm_framework::iAsset {
     }
 
     /// Redeems iAssets for underlying assets after the lockup period, updating user and global metrics.
+    /// When `force` is true (admin-gated, single-tx path), the lockup-cycle waiting period is bypassed.
     public (friend) fun redeem_iasset(
         account: &signer,
         asset: Object<Metadata>,
+        force: bool,
     ) :u64 acquires LiquidityProvider, TotalLiquidity, LiquidityTableItems, AssetOperations {
 
 
         let tracked_assets = borrow_global<TotalLiquidity>(get_storage_address());
         // ensure that the iasset exists and it is redeemable
         assert!(smart_table::contains(&tracked_assets.assets, asset),error::not_found(EASSET_NOT_PRESENT));
-        assert_redeemable(asset);
+        // a forced redeem (owner-gated, single-tx) intentionally bypasses the redeemable asset check
+        if (!force) {
+            assert_redeemable(asset);
+        };
 
         let account_address = signer::address_of(account);
 
@@ -1141,14 +1150,15 @@ module dfmm_framework::iAsset {
 
         let provider_ref = borrow_global_mut<LiquidityProvider>(user_liquidity_obj_address);
 
-        let recent_cycle_update_epoch = get_cycle_data();
-
         let asset_entry = smart_table::borrow_mut(
             &mut provider_ref.asset_entry, asset);
 
         // Ensure that redeem_requested_iAssets is greater 0 and that the required waiting period has elapsed to redeem the iAsset
         assert!(asset_entry.redeem_requested_iassets > 0, error::invalid_state(EREDEEM_AMOUNT));
-        assert!(asset_entry.unlock_request_epoch < recent_cycle_update_epoch, error::invalid_argument(EUNLOCK_REQUEST_TIME));
+        // a forced redeem (owner-gated, single-tx) intentionally bypasses the lockup-cycle wait
+        if (!force) {
+            assert!(asset_entry.unlock_request_epoch < get_cycle_data(), error::invalid_argument(EUNLOCK_REQUEST_TIME));
+        };
 
         // calculate the amount of collateral asset the user should receive
         let asset_to_withdraw = preview_redeem(asset_entry.redeem_requested_iassets, asset);
@@ -1283,9 +1293,9 @@ module dfmm_framework::iAsset {
                 let collateral_supply = table_obj.collateral_supply;
 
                 let (price, decimal, _, _) = get_oracle_price_impl(table_obj.pair_id); // price in usdt of the asset
-                // Compute the nominal liquidity value(acting as collateral) denominated in SUPRA
+                // Compute the nominal liquidity value(acting as collateral) denominated in SUPRA. 
                 let liquidity_of_asset = asset_util::get_asset_value_in(collateral_supply, price, decimal, supra_price.value, supra_price.decimals);
-
+                // All collateral supplies are already normalized to a common decimal precision at the time of bridging (same precision as SupraCoin), so they can be safely summed.
                 total_nominal_liquidity = total_nominal_liquidity + liquidity_of_asset;
         });
 

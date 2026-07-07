@@ -520,7 +520,7 @@ module dfmm_framework::iAsset_test  {
             ORIGIN_TOKEN_ADDRESS, ORIGIN_TOKEN_CHAIN_ID, SOURCE_TOKEN_DECIMALS, SOURCE_TOKEN_ADDRESS);
 
         let amount = 1000;
-        iAsset::redeem_request(alice, amount, asset, 0);
+        iAsset::redeem_request(alice, amount, asset, 0, false);
     }
 
     #[test(deployer = @dfmm_framework, supra = @0x1, alice = @0x999)]
@@ -531,7 +531,7 @@ module dfmm_framework::iAsset_test  {
         let asset = test_dummy_fa(supra, b"BTC", b"iBTC");
 
         let amount = 1000;
-        iAsset::redeem_request(alice, amount, asset, 0);
+        iAsset::redeem_request(alice, amount, asset, 0, false);
     }
 
     #[test(deployer = @dfmm_framework, supra = @0x1, alice = @0x999, bob = @0x888)]
@@ -627,7 +627,7 @@ module dfmm_framework::iAsset_test  {
 
         //timestamp::fast_forward_seconds(delta_time);
         // redeem_request
-        iAsset::redeem_request(alice, amount_1_r, asset, 0);
+        iAsset::redeem_request(alice, amount_1_r, asset, 0, false);
         let items =  iAsset::get_liquidity_table_items(asset);
         let (_, _, _, _, _, total_withdraw_requests,total_preminted_assets, total_redeem_requested_iassets, deposited_asset_supply) = iAsset::deconstruct_liquidity_table_items(&items);
         let asset_entry = iAsset :: get_asset_entry(alice_addr, asset);
@@ -665,7 +665,7 @@ module dfmm_framework::iAsset_test  {
         iAsset::premint_iasset(amount_1, asset, alice_addr);
 
         // error. no redeem_request recorded
-        iAsset::redeem_iasset(alice, asset);
+        iAsset::redeem_iasset(alice, asset, false);
     }
 
     #[test(deployer = @dfmm_framework, supra = @0x1, alice = @0x999)]
@@ -676,7 +676,7 @@ module dfmm_framework::iAsset_test  {
         iAsset::init_iAsset_for_test(deployer);
         let asset = test_dummy_fa(supra, b"BTC", b"iBTC");
 
-        iAsset::redeem_iasset(alice, asset);
+        iAsset::redeem_iasset(alice, asset, false);
     }
 
     #[test(deployer = @dfmm_framework, supra = @0x1)]
@@ -846,7 +846,7 @@ module dfmm_framework::iAsset_test  {
 
         //timestamp::fast_forward_seconds(delta_time);
         // redeem_request
-        iAsset::redeem_request(alice, amount_1_r, asset, 0);
+        iAsset::redeem_request(alice, amount_1_r, asset, 0, false);
         let items =  iAsset::get_liquidity_table_items(asset);
         let (_, _, _, _, _, total_withdraw_requests, total_preminted_assets, total_redeem_requested_iassets, deposited_asset_supply) = iAsset::deconstruct_liquidity_table_items(&items);
         let asset_entry_alice = iAsset :: get_asset_entry(alice_addr, asset);
@@ -874,7 +874,7 @@ module dfmm_framework::iAsset_test  {
         assert!(unlock_request_timestep + length_of_lockup_cycle <= timestamp::now_seconds(), error::invalid_state(1));
         // redeem
         iAsset::update_recent_cycle_update_epoch(3);
-        iAsset::redeem_iasset(alice, asset); // 3rd parameter is an external wallet
+        iAsset::redeem_iasset(alice, asset, false); // 3rd parameter is an external wallet
         let items =  iAsset::get_liquidity_table_items(asset);
         let (_, _, _, _, _, _, total_preminted_assets, total_redeem_requested_iassets, deposited_asset_supply) = iAsset::deconstruct_liquidity_table_items(&items);
         let asset_entry_alice = iAsset :: get_asset_entry(alice_addr, asset);
@@ -928,7 +928,7 @@ module dfmm_framework::iAsset_test  {
 
         //timestamp::fast_forward_seconds(delta_time);
         // redeem_request
-        iAsset::redeem_request(alice, amount_1_r, asset, 0);
+        iAsset::redeem_request(alice, amount_1_r, asset, 0, false);
         let asset_entry = iAsset::get_asset_entry(alice_addr, asset);
         let (_, _, _, _, _, unlock_request_timestep, _) = iAsset::deconstruct_asset_entry(option::borrow(&asset_entry));
         let length_of_lockup_cycle = config::get_length_of_lockup_cycle();
@@ -939,7 +939,7 @@ module dfmm_framework::iAsset_test  {
         assert!(iAsset::get_iasset_supply(asset) == amount_1 - amount_1_r, error::invalid_state(1));
 
         // move the time
-        iAsset::redeem_iasset(alice, asset); // 3rd parameter is an external wallet
+        iAsset::redeem_iasset(alice, asset, false); // 3rd parameter is an external wallet
     }
 
     #[test(deployer = @dfmm_framework, supra = @0x1)]
