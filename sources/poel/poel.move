@@ -223,16 +223,34 @@ module dfmm_framework::poel {
         iasset: Object<Metadata>,
     }
 
+    // Obsolete event. RedeemEventV2 (with the `force` flag) is used instead.
     #[event]
     struct RedeemEvent has copy, drop, store {
         account: address, // user
         asset: address, // iasset
-        amount: u64, // assets to withdraw 
+        amount: u64, // assets to withdraw
         origin_token_amount : u128, // scaled amount
-        origin_token_address : vector<u8>, 
+        origin_token_address : vector<u8>,
         origin_token_chain_id : u64, // chain id
         source_bridge_address : vector<u8>, // bridge
         destination_address : vector<u8> // receiver
+    }
+
+    /// Emitted on every redeem (normal and forced). Supersedes `RedeemEvent`, adding the `force` flag:
+    /// when `force` is true the redeem was the admin-only single-tx path that bypasses the lockup-cycle
+    /// wait and skips the cross-chain Hypernova release message (the external release is reconciled
+    /// off-chain). All other fields match `RedeemEvent`.
+    #[event]
+    struct RedeemEventV2 has copy, drop, store {
+        account: address, // user / admin caller
+        asset: address, // iasset
+        amount: u64, // assets to withdraw (incl. relayer reward)
+        origin_token_amount : u128, // scaled-to-origin amount
+        origin_token_address : vector<u8>,
+        origin_token_chain_id : u64, // chain id
+        source_bridge_address : vector<u8>, // bridge
+        destination_address : vector<u8>, // receiver
+        force : bool // true when emitted by the admin forced-redeem path
     }
 
     #[resource_group_member(group = supra_framework::object::ObjectGroup)]
@@ -1566,28 +1584,55 @@ module dfmm_framework::poel {
     
     /// Submits a redemption request to convert iAsset into the collateral asset
     public entry fun redeem_request(account: &signer, iasset: Object<Metadata>, amount: u64) {
-        let fees = take_redeem_service_fees(iasset);
-        iAsset::redeem_request(account, amount, iasset, fees);
+        redeem_request_internal(account, iasset, amount, false);
     }
 
     /// Redeems iAsset for the collateral asset
     public entry fun redeem_iasset(account: &signer, iasset: Object<Metadata>, destination: vector<u8>) {
+        redeem_iasset_internal(account, iasset, destination, false);
+    }
+
+    /// Restricted (owner-only) forced redeem. Executes `redeem_request` and `redeem_iasset` in a single tx,
+    /// bypassing the lockup-cycle waiting period enforced by the normal redeem flow. For cross-chain assets
+    /// it does NOT post a Hypernova release message; instead a `RedeemEventV2 { force: true }` is emitted so
+    /// the external release can be reconciled off-chain. For Supra-native assets the pool withdraw still happens.
+    public entry fun redeem_iasset_force(account: &signer, iasset: Object<Metadata>, amount: u64, destination: vector<u8>) {
+        config::assert_owner(account);
+
+        // 1. submit the redemption request (force = bypass the redeemable asset check; burns iAssets, records the request)
+        redeem_request_internal(account, iasset, amount, true);
+
+        // 2. immediately redeem (force = bypass lockup-cycle wait + skip cross-chain Hypernova message)
+        redeem_iasset_internal(account, iasset, destination, true);
+    }
+
+    /// Shared: charge the redeem service fee and submit the redemption request (burns iAssets).
+    fun redeem_request_internal(account: &signer, iasset: Object<Metadata>, amount: u64, force: bool) {
+        let fees = take_redeem_service_fees(iasset);
+        iAsset::redeem_request(account, amount, iasset, fees, force);
+    }
+
+    /// Shared redeem-and-release logic. When `force` is true, the lockup-cycle wait (in `iAsset`) and the
+    /// cross-chain Hypernova release message (in `redeem_router`) are both bypassed; the Supra-native pool
+    /// withdraw still happens. Emits `RedeemEventV2` (with the `force` flag) for both paths.
+    fun redeem_iasset_internal(account: &signer, iasset: Object<Metadata>, destination: vector<u8>, force : bool) {
         let (origin_token_address, origin_token_chain_id, origin_token_decimals, source_bridge_address) = iAsset::deconstruct_iasset_source(&iAsset::get_iasset_source(iasset));
-        let amount = iAsset::redeem_iasset(account, iasset);
+        let amount = iAsset::redeem_iasset(account, iasset, force);
         // de-normalize (from 8 to origin decimals) redeem amount before sending to the redeem process
         let n_amount = asset_util::scale_to_origin(amount, origin_token_decimals);
-        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, n_amount, destination);
+        redeem_router::redeem_iasset(origin_token_address, origin_token_chain_id, source_bridge_address, n_amount, destination, force);
 
-        event::emit<RedeemEvent>(
-            RedeemEvent {
+        event::emit<RedeemEventV2>(
+            RedeemEventV2 {
                 account : signer::address_of(account),
                 asset : object::object_address(&iasset),
-                amount : amount,
-                origin_token_amount : n_amount,
+                amount : amount, // amount to redeem including relayer reward
+                origin_token_amount : n_amount, // scaled-to-origin amount to redeem including relayer reward
                 origin_token_address : origin_token_address,
                 origin_token_chain_id: origin_token_chain_id,
                 source_bridge_address : source_bridge_address,
-                destination_address : destination
+                destination_address : destination,
+                force : force
             }
         );
     }

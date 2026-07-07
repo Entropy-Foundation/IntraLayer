@@ -38,7 +38,7 @@ module dfmm_framework::redeem_router {
         origin_token_address: vector<u8>, // origin token address
         origin_token_chain_id: u64,  // origin chain id
         _source_bridge_address: vector<u8>, // source bridge, need to reserve this param
-        amount: u128, destination: vector<u8>) {
+        amount: u128, destination: vector<u8>, force : bool) {
 
         assert!(amount > 0, error::invalid_state(ENOTHING_TO_REDEEM));
         let chain_id = (chain_id::get() as u64);
@@ -58,9 +58,13 @@ module dfmm_framework::redeem_router {
             asset_pool::withdraw_fa(asset, amount64, destination);
 
         } else {
-            // It is an external coin
-            // emit an event to HyperNova, but it is not supported now
-            abort error::invalid_state(EREDEEM_EXTERNAL)
+
+            // we can't abort execution in case of force even if HN hasn't integrated
+            if (!force) {
+                // It is an external coin
+                // emit an event to HyperNova, but it is not supported now                
+                abort error::invalid_state(EREDEEM_EXTERNAL);
+            };
         }
     }
 

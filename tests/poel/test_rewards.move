@@ -491,7 +491,7 @@ module dfmm_framework::poel_rewards_test {
         assert!(balance == 1000000000, 1);
 
         // for burning iAssets
-        iAsset::redeem_request(u1, 500000000, btc, 0);
+        iAsset::redeem_request(u1, 500000000, btc, 0, false);
 
         let balance = iAsset::get_iasset_supply(btc);
 
