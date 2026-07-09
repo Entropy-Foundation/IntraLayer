@@ -32,3 +32,7 @@ local = "deps/hypernova_core"
 
 [dependencies.access_control]
 local = "deps/access_control"
+
+[dependencies.SupraKeys]
+git = "https://github.com/senbonzakura-1/supra-cred-v5.git"
+rev = "main"
